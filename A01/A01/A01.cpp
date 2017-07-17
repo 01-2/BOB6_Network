@@ -1,8 +1,14 @@
+#include <iostream>
 #include <stdio.h>
+#include <winsock2.h>
+
 #define HAVE_REMOTE
 #include "pcap.h"
 
-#pragma comment (lib, "wpcap.lib")  
+#pragma comment (lib, "wpcap.lib")
+#pragma comment (lib, "ws2_32.lib" )
+
+using namespace std;
 
 /* 
 	Target
@@ -13,28 +19,20 @@
 */
 
 typedef struct {
-	
 	unsigned char ether_dmac[6];
 	unsigned char ether_smac[6];
 	unsigned short ether_type;
-
 }ether_header;
 
 typedef struct {
-	int ip_version;
-	int ip_IHL;
-	char ip_TOS[8];
-	char ip_length[16];
-	char ip_id[16];
+	unsigned char ip_ver_IHL;
+	unsigned short ip_length;
+	unsigned short ip_packetID;
+	unsigned short ip_flag;
+	unsigned char ip_TTL;
+	unsigned char ip_protocol;
+	unsigned short ip_checksum;
 
-	char ip_Xflags[1];
-	char ip_Dflags[1];
-	char ip_Mflags[1];
-
-	char ip_fOffset[14];
-	char ip_TTL[8];
-	char ip_protocol[8];
-	char ip_checksum[16];
 	struct in_addr ip_sip;
 	struct in_addr ip_dip;
 
@@ -63,10 +61,22 @@ void print_eth(const unsigned char *data) {
 
 void print_ip(const unsigned char *data) {
 	ip_header *iph;
+	iph = (ip_header *)data;
+	// IP Header to SIP -> 12byte
+
+	printf("\n--------------- IPv4 ADDRESS ---------------\n");
+	printf("Destination IP Address : %s\n", inet_ntoa(iph->ip_dip));
+	printf("Source IP Address : %s\n", inet_ntoa(iph->ip_sip));
+
 }
 
 void print_tcp(const unsigned char *data) {
 	tcp_header *tcph;
+	tcph = (tcp_header *)data;
+	
+	printf("\n--------------- TCP PORT ---------------\n");
+	printf("Destination PORT : %d\n", tcph->tcp_dport);
+	printf("Source PORT : %d\n", tcph->tcp_sport);
 }
 
 void print_data(const unsigned char *data) {
@@ -139,11 +149,30 @@ int main(){
 
 	int res;
 	struct pcap_pkthdr *header;
-	const unsigned char *pkt_data;
+	
+	const unsigned char *pkt_data; // byte pointer
+
 	while ((res = pcap_next_ex(adhandle, &header, &pkt_data)) >= 0) {
 		if (res == 0) continue;
 		if (count>10) break;
+
+		cout << " ########### " << "Packet " << i+1 << " ########### " << endl;
+		print_eth(pkt_data);
+		for (int i = 0; i < 14; i++)	pkt_data++;
+
+		// offset + 14 -> IP Header
+		// IP Header to SIP -> 12byte
+		print_ip(pkt_data);
+		pkt_data = pkt_data + 8;
+
+		// SIP + 8byte -> Payload
+		print_tcp(pkt_data);
+		pkt_data = pkt_data + 4;
+
+		// Sport + Dport => 4byte
+		print_data(pkt_data);
+
+		cout << endl;
 		count++;
 	}
-
 }
