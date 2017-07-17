@@ -25,7 +25,9 @@ typedef struct {
 }ether_header;
 
 typedef struct {
+	// 20byte
 	unsigned char ip_ver_IHL;
+	unsigned char ip_TOS;
 	unsigned short ip_length;
 	unsigned short ip_packetID;
 	unsigned short ip_flag;
@@ -41,6 +43,9 @@ typedef struct {
 typedef struct {
 	unsigned short tcp_sport;
 	unsigned short tcp_dport;
+	unsigned int tcp_sqnum;
+	unsigned int tcp_acknum;
+	unsigned char tcp_offRes;
 }tcp_header;
 
 // ---------------- FUNCTIONS ------------------
@@ -49,39 +54,57 @@ void print_eth(const unsigned char *data) {
 	ether_header *eth;
 	eth = (ether_header *) data;
 
-	printf("\n--------------- MAC ADDRESS ---------------\n");
-	printf("Destination MAC Address [%02x:%02x:%02x:%02x:%02x:%02x]\n"
+	printf("\n--------------- MAC ADDRESS ----------------\n");
+	printf("Destination MAC Address : [%02x:%02x:%02x:%02x:%02x:%02x]\n"
 	, eth->ether_dmac[0], eth->ether_dmac[1], eth->ether_dmac[2], 
 		eth->ether_dmac[3], eth->ether_dmac[4], eth->ether_dmac[5]);
 	
-	printf("Source MAC Address [%02x:%02x:%02x:%02x:%02x:%02x]\n"
+	printf("Source MAC Address : [%02x:%02x:%02x:%02x:%02x:%02x]"
 		, eth->ether_smac[0], eth->ether_smac[1], eth->ether_smac[2],
 		eth->ether_smac[3], eth->ether_smac[4], eth->ether_smac[5]);
 }
 
-void print_ip(const unsigned char *data) {
+int print_ip(const unsigned char *data) {
 	ip_header *iph;
+	int mask_size = 0;
 	iph = (ip_header *)data;
 	// IP Header to SIP -> 12byte
 
 	printf("\n--------------- IPv4 ADDRESS ---------------\n");
 	printf("Destination IP Address : %s\n", inet_ntoa(iph->ip_dip));
-	printf("Source IP Address : %s\n", inet_ntoa(iph->ip_sip));
+	printf("Source IP Address : %s", inet_ntoa(iph->ip_sip));
 
+	mask_size = (iph->ip_ver_IHL) & 15;
+	return mask_size * 4;
 }
 
-void print_tcp(const unsigned char *data) {
+int print_tcp(const unsigned char *data) {
 	tcp_header *tcph;
 	tcph = (tcp_header *)data;
-	
-	printf("\n--------------- TCP PORT ---------------\n");
-	printf("Destination PORT : %d\n", tcph->tcp_dport);
-	printf("Source PORT : %d\n", tcph->tcp_sport);
+
+	// get pure offset from bit mask oprations
+	int pure_offset = 0;
+	pure_offset = tcph->tcp_offRes & 15;
+	pure_offset = pure_offset >> 4;
+	pure_offset = pure_offset & 240;
+
+	printf("\n----------------- TCP PORT -----------------\n");
+	printf("Destination PORT : %d\n", ntohs(tcph->tcp_dport));
+	printf("Source PORT : %d\n", ntohs(tcph->tcp_sport));
+
+	return pure_offset * 4;
 }
 
 void print_data(const unsigned char *data) {
-	printf("---------- DATA ----------");
-	printf("%s\n", data);
+	printf("------------------- DATA -------------------\n");
+	printf("[ %02x %02x %02x %02x %02x | %02x %02x %02x %02x %02x ]\n",
+		data[0], data[1], data[2], data[3], data[4], data[5], data[6], data[7], data[8], data[9]);
+	printf("[ %02x %02x %02x %02x %02x | %02x %02x %02x %02x %02x ]\n",
+		data[10], data[11], data[12], data[13], data[14], data[15], data[16], data[17], data[18], data[19]);
+	printf("[ %02x %02x %02x %02x %02x | %02x %02x %02x %02x %02x ]\n",
+		data[20], data[21], data[22], data[23], data[24], data[25], data[26], data[27], data[28], data[29]);
+	printf("[ %02x %02x %02x %02x %02x | %02x %02x %02x %02x %02x ]\n",
+		data[30], data[31], data[32], data[33], data[34], data[35], data[36], data[37], data[38], data[39]);
 }
 
 int main(){
@@ -115,7 +138,7 @@ int main(){
 		return -1;
 	}
 
-	printf("Enter the interface number (1-%d):", i);
+	printf("Enter the interface number (1-%d): ", i);
 	scanf_s("%d", &inum);
 
 	if (inum < 1 || inum > i){
@@ -147,7 +170,10 @@ int main(){
 	/* At this point, we don't need any more the device list. Free it */
 	pcap_freealldevs(alldevs);
 
+	int ip_res = 0, tcp_res = 0;
 	int res;
+	int sum_header = 0;
+
 	struct pcap_pkthdr *header;
 	
 	const unsigned char *pkt_data; // byte pointer
@@ -155,19 +181,23 @@ int main(){
 	while ((res = pcap_next_ex(adhandle, &header, &pkt_data)) >= 0) {
 		if (res == 0) continue;
 		if (count>10) break;
-
-		cout << " ########### " << "Packet " << i+1 << " ########### " << endl;
+		
+		cout << "##################################################\n";
+		cout << "#################### " << "Packet " << count+1 << " #################### " << endl;
 		print_eth(pkt_data);
 		for (int i = 0; i < 14; i++)	pkt_data++;
 
 		// offset + 14 -> IP Header
 		// IP Header to SIP -> 12byte
-		print_ip(pkt_data);
-		pkt_data = pkt_data + 8;
+		ip_res = print_ip(pkt_data);
+		for (int i = 0; i < ip_res; i++)	pkt_data++;
 
 		// SIP + 8byte -> Payload
-		print_tcp(pkt_data);
-		pkt_data = pkt_data + 4;
+		tcp_res = print_tcp(pkt_data);
+
+		sum_header = 14 + ip_res + tcp_res;
+		
+		for (int i = 0; i < tcp_res; i++)	pkt_data++;
 
 		// Sport + Dport => 4byte
 		print_data(pkt_data);
