@@ -48,6 +48,7 @@ typedef struct {
 	unsigned char tcp_offRes;
 }tcp_header;
 
+
 // ---------------- FUNCTIONS ------------------
 
 void print_eth(const unsigned char *data) {
@@ -68,12 +69,13 @@ int print_ip(const unsigned char *data) {
 	ip_header *iph;
 	int mask_size = 0;
 	iph = (ip_header *)data;
-	// IP Header to SIP -> 12byte
 
+	// IP Header to SIP -> 12byte
 	printf("\n--------------- IPv4 ADDRESS ---------------\n");
 	printf("Destination IP Address : %s\n", inet_ntoa(iph->ip_dip));
 	printf("Source IP Address : %s", inet_ntoa(iph->ip_sip));
 
+	// get pure mask size from bit mask operations
 	mask_size = (iph->ip_ver_IHL) & 15;
 	return mask_size * 4;
 }
@@ -96,6 +98,7 @@ int print_tcp(const unsigned char *data) {
 }
 
 void print_data(const unsigned char *data) {
+	// print 40byte of data
 	printf("------------------- DATA -------------------\n");
 	printf("[ %02x %02x %02x %02x %02x | %02x %02x %02x %02x %02x ]\n",
 		data[0], data[1], data[2], data[3], data[4], data[5], data[6], data[7], data[8], data[9]);
@@ -108,7 +111,9 @@ void print_data(const unsigned char *data) {
 }
 
 int main(){
+
 	// example : Opening an adapter and capturing the packets
+
 	pcap_if_t *alldevs;
 	pcap_if_t *d;
 	int inum;
@@ -167,9 +172,9 @@ int main(){
 
 	printf("\nlistening on %s...\n", d->description);
 
-	/* At this point, we don't need any more the device list. Free it */
 	pcap_freealldevs(alldevs);
 
+	// set required variables
 	int ip_res = 0, tcp_res = 0;
 	int res;
 	int sum_header = 0;
@@ -178,6 +183,7 @@ int main(){
 	
 	const unsigned char *pkt_data; // byte pointer
 
+	// get next packet from pcap_next_ex functions 
 	while ((res = pcap_next_ex(adhandle, &header, &pkt_data)) >= 0) {
 		if (res == 0) continue;
 		if (count>10) break;
@@ -187,9 +193,10 @@ int main(){
 		print_eth(pkt_data);
 		for (int i = 0; i < 14; i++)	pkt_data++;
 
-		// offset + 14 -> IP Header
-		// IP Header to SIP -> 12byte
+		
+		
 		ip_res = print_ip(pkt_data);
+		// move header pointer by "for" loop
 		for (int i = 0; i < ip_res; i++)	pkt_data++;
 
 		// SIP + 8byte -> Payload
@@ -197,12 +204,12 @@ int main(){
 
 		sum_header = 14 + ip_res + tcp_res;
 		
+		// move header pointer by "for" loop
 		for (int i = 0; i < tcp_res; i++)	pkt_data++;
 
-		// Sport + Dport => 4byte
 		print_data(pkt_data);
 
 		cout << endl;
-		count++;
+		count++;	// counting printed packets
 	}
 }
